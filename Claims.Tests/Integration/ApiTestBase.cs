@@ -8,6 +8,7 @@ namespace Claims.Tests.Integration;
 public abstract class ApiTestBase(ApiFixture fixture)
 {
     protected static DateTime Today => ApiFixture.Today;
+    protected readonly ApiFixture Fixture = fixture;
     protected readonly HttpClient Client = fixture.CreateClient();
     protected static CancellationToken Ct => TestContext.Current.CancellationToken;
 

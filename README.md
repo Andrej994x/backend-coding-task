@@ -50,7 +50,7 @@ One API project with simple logical layers:
 | `Controllers/` | HTTP only: bind the request, call a service, return the HTTP result. |
 | `Services/`    | Business operations (`ClaimService`, `CoverService`) and premium pricing (`PremiumCalculator`). |
 | `Persistence/` | MongoDB access through EF Core (`ClaimsContext`, `ClaimRepository`, `CoverRepository`). |
-| `Auditing/`    | Audit records in SQL Server (`AuditContext`, `Auditer`). |
+| `Auditing/`    | Audit events: in-memory queue (`AuditQueue`), background writer (`AuditBackgroundService`), SQL Server (`AuditContext`). |
 | `Domain/`      | Entities and enums (`Claim`, `Cover`). |
 
 Design choices:
@@ -85,6 +85,10 @@ Date assumptions:
   converted to UTC. Before this change the Mongo driver treated such values as server local time and shifted them.
   Existing data is not migrated: the local setup always starts with empty containers.
 - Rules compare calendar dates; the time of day is ignored.
+- Claim boundaries are inclusive: a claim on the first or the last day of the cover is accepted. The premium, however,
+  counts the days between `StartDate` and `EndDate` (the original formula), so the `EndDate` itself is not charged.
+  This is a deliberate, customer-friendly choice; if the business wants them aligned, either the premium charges the
+  end date or the claim rule becomes `Created < EndDate`.
 - A cover from 29 February can run until 28 February of the next year (this is how `AddYears(1)` works).
 
 Not added on purpose, because the assignment does not ask for it: a minimum `DamageCost`, and blocking the
@@ -116,8 +120,9 @@ Limitations of this in-memory approach (accepted for this task):
 - Each API instance has its own queue; there is no shared, durable queue.
 - The audit row can be written shortly after the HTTP response, so it is eventually consistent.
 
-For guaranteed delivery, the next step would be an outbox table written in the same transaction as the business data,
-or a durable broker (for example Azure Service Bus).
+For guaranteed delivery, the audit event must be stored atomically with the business change, for example an outbox
+collection written in the same MongoDB transaction and then forwarded to SQL Server (or to a durable broker such as
+Azure Service Bus). A broker alone does not close the gap between saving the claim and publishing the event.
 
 ## Premium calculation
 

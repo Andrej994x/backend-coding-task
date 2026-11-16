@@ -8,8 +8,6 @@ namespace Claims.Tests.Integration;
 
 public class AuditingApiTests(ApiFixture fixture) : ApiTestBase(fixture)
 {
-    private readonly ApiFixture _fixture = fixture;
-
     [Fact]
     public async Task Create_and_delete_are_eventually_saved_to_sql_server()
     {
@@ -40,7 +38,7 @@ public class AuditingApiTests(ApiFixture fixture) : ApiTestBase(fixture)
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (true)
         {
-            using var scope = _fixture.Factory.Services.CreateScope();
+            using var scope = Fixture.Factory.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<AuditContext>();
             var types = await context.CoverAudits
                 .Where(audit => audit.CoverId == coverId)
