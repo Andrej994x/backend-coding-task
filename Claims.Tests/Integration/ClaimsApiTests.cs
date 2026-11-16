@@ -59,6 +59,20 @@ public class ClaimsApiTests(ApiFixture fixture) : ApiTestBase(fixture)
     }
 
     [Fact]
+    public async Task Created_with_offset_is_compared_in_utc()
+    {
+        var cover = await CreateCoverAsync(Today.AddDays(1), Today.AddDays(60));
+        object ClaimCreatedAt(string created) => new { coverId = cover.Id, name = "n", type = "Fire", damageCost = 10m, created };
+
+        // 01:00 at +02:00 on the day after the cover ends is still the last cover day in UTC.
+        var lastDay = await PostAsync("/Claims", ClaimCreatedAt($"{Today.AddDays(61):yyyy-MM-dd}T01:00:00+02:00"));
+        var dayAfter = await PostAsync("/Claims", ClaimCreatedAt($"{Today.AddDays(61):yyyy-MM-dd}T03:00:00+02:00"));
+
+        Assert.Equal(HttpStatusCode.OK, lastDay.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, dayAfter.StatusCode);
+    }
+
+    [Fact]
     public async Task Claim_without_damage_cost_is_rejected()
     {
         var cover = await CreateCoverAsync(Today.AddDays(1), Today.AddDays(60));

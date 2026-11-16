@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Claims.Tests.Integration;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 [assembly: AssemblyFixture(typeof(ApiFixture))]
@@ -19,7 +20,12 @@ public sealed class ApiFixture : IAsyncDisposable
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public WebApplicationFactory<Program> Factory { get; } = new();
+    // The API clock is fixed, so tests do not break when the run crosses midnight.
+    public static readonly DateTime Today = DateTime.UtcNow.Date;
+
+    public WebApplicationFactory<Program> Factory { get; } = new WebApplicationFactory<Program>()
+        .WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddSingleton<TimeProvider>(new FixedTimeProvider(Today.AddHours(12)))));
 
     public HttpClient CreateClient() => Factory.CreateClient();
 

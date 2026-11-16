@@ -7,7 +7,7 @@ namespace Claims.Tests.Integration;
 [Trait("Category", "Integration")]
 public abstract class ApiTestBase(ApiFixture fixture)
 {
-    protected static readonly DateTime Today = DateTime.UtcNow.Date;
+    protected static DateTime Today => ApiFixture.Today;
     protected readonly HttpClient Client = fixture.CreateClient();
     protected static CancellationToken Ct => TestContext.Current.CancellationToken;
 
