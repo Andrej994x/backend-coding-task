@@ -1,6 +1,9 @@
 using System.Net;
 using Claims.Domain;
+using Claims.Persistence;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Claims.Tests.Integration;
@@ -52,5 +55,34 @@ public class CoversApiTests(ApiFixture fixture) : ApiTestBase(fixture)
     {
         Assert.Equal(HttpStatusCode.NotFound, (await Client.GetAsync("/Covers/unknown", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Client.DeleteAsync("/Covers/unknown", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Mongo_provider_reports_a_concurrent_delete_as_concurrency_exception()
+    {
+        var cover = await CreateCoverAsync(Today.AddDays(1), Today.AddDays(30));
+        using var first = Fixture.Factory.Services.CreateScope();
+        using var second = Fixture.Factory.Services.CreateScope();
+        var firstContext = first.ServiceProvider.GetRequiredService<ClaimsContext>();
+        var secondRepository = second.ServiceProvider.GetRequiredService<ICoverRepository>();
+
+        // The repositories rely on this: the first request has read the cover, then another request deletes it.
+        var loaded = await firstContext.Covers.SingleAsync(c => c.Id == cover.Id, Ct);
+        Assert.True(await secondRepository.DeleteAsync(cover.Id));
+        firstContext.Covers.Remove(loaded);
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => firstContext.SaveChangesAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Validation_error_is_400_even_when_client_asks_for_xml()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/Covers/compute?startDate={Today:yyyy-MM-dd}&endDate={Today.AddDays(-1):yyyy-MM-dd}&coverType=Yacht");
+        request.Headers.Accept.ParseAdd("application/xml");
+
+        var response = await Client.SendAsync(request, Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }

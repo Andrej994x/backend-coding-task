@@ -36,7 +36,15 @@ public class ClaimRepository(ClaimsContext context) : IClaimRepository
         }
 
         context.Claims.Remove(claim);
-        await context.SaveChangesAsync();
-        return true;
+        try
+        {
+            await context.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another request deleted the same claim between our read and our delete.
+            return false;
+        }
     }
 }

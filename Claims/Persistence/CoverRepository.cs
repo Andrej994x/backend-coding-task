@@ -36,7 +36,15 @@ public class CoverRepository(ClaimsContext context) : ICoverRepository
         }
 
         context.Covers.Remove(cover);
-        await context.SaveChangesAsync();
-        return true;
+        try
+        {
+            await context.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another request deleted the same cover between our read and our delete.
+            return false;
+        }
     }
 }
