@@ -62,14 +62,14 @@ public class PremiumCalculatorTests
         { CoverType.BulkCarrier, 366, 580_807.5m }
     };
 
-    [Theory(Skip = KnownBug)]
+    [Theory]
     [MemberData(nameof(Premiums))]
     public void Premium_matches_the_official_rules(CoverType coverType, int days, decimal expected)
     {
         Assert.Equal(expected, _calculator.Calculate(Start, Start.AddDays(days), coverType));
     }
 
-    [Fact(Skip = KnownBug)]
+    [Fact]
     public void Premium_counts_calendar_days_and_ignores_the_time_of_day()
     {
         // From the evening of 1 January to the morning of 31 January is 30 calendar days.
@@ -79,5 +79,28 @@ public class PremiumCalculatorTests
         Assert.Equal(41_250m, _calculator.Calculate(start, end, CoverType.Yacht));
     }
 
-    private const string KnownBug = "Known premium calculation bug, fixed in Task 5";
+    [Fact]
+    public void Short_period_over_midnight_is_one_day()
+    {
+        var start = new DateTime(2027, 1, 1, 23, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(1_375m, _calculator.Calculate(start, start.AddHours(2), CoverType.Yacht));
+    }
+
+    [Theory]
+    [InlineData(0)]   // same moment
+    [InlineData(-24)] // end before start
+    [InlineData(5)]   // 5 hours, but on the same calendar day
+    public void Period_shorter_than_one_calendar_day_is_rejected(int hours)
+    {
+        var start = new DateTime(2027, 1, 1, 8, 0, 0, DateTimeKind.Utc);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => _calculator.Calculate(start, start.AddHours(hours), CoverType.Yacht));
+    }
+
+    [Fact]
+    public void Unknown_cover_type_is_rejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => _calculator.Calculate(Start, Start.AddDays(10), (CoverType)99));
+    }
 }

@@ -43,6 +43,7 @@ public class CoversApiTests(ApiFixture fixture) : ApiTestBase(fixture)
         var bad = await Client.PostAsync($"/Covers/compute?startDate={start}&endDate={tooLate}&coverType=Yacht", null, Ct);
 
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal(41_250m, await ReadAsync<decimal>(ok)); // 30 days of Yacht at full price
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
     }
 

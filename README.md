@@ -118,3 +118,26 @@ Limitations of this in-memory approach (accepted for this task):
 
 For guaranteed delivery, the next step would be an outbox table written in the same transaction as the business data,
 or a durable broker (for example Azure Service Bus).
+
+## Premium calculation
+
+`PremiumCalculator` implements the rules from the assignment:
+
+| Cover type    | Day rate (1250 x multiplier) | Days 1-30 | Days 31-180 | From day 181 |
+|---------------|------------------------------|-----------|-------------|--------------|
+| Yacht         | 1375 (x1.1)                  | full      | -5%         | -8%          |
+| PassengerShip | 1500 (x1.2)                  | full      | -2%         | -3%          |
+| Tanker        | 1875 (x1.5)                  | full      | -2%         | -3%          |
+| ContainerShip | 1625 (x1.3)                  | full      | -2%         | -3%          |
+| BulkCarrier   | 1625 (x1.3)                  | full      | -2%         | -3%          |
+
+The old code added up to three prices for the same day (overlapping `if`s), applied the "from day 181" price from
+day one and charged nothing after day 365. The new code splits the period into three bands, so each day is charged once.
+
+Assumptions:
+
+- "Additional 3% / 1%" is added to the first discount, so from day 181 the total discount is 8% (Yacht) and 3% (others).
+  The old code used the same 0.08 and 0.03 values.
+- The number of days is the number of whole calendar days between `StartDate` and `EndDate`; the end date itself is not
+  charged and the time of day is ignored (1 Jan -> 2 Jan = 1 day). A one-year cover over 29 February has 366 days.
+- Only `decimal` is used. No rounding is applied: with the current rates every result is already exact to the cent.
