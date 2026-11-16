@@ -1,3 +1,4 @@
+using Claims.Contracts;
 using Claims.Domain;
 using Claims.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -12,12 +13,14 @@ public class ClaimsController(ClaimService claimService) : ControllerBase
     public Task<IReadOnlyList<Claim>> GetAsync() => claimService.GetAllAsync();
 
     [HttpGet("{id}")]
-    public Task<Claim?> GetAsync(string id) => claimService.GetByIdAsync(id);
+    public async Task<ActionResult<Claim>> GetAsync(string id) =>
+        await claimService.GetByIdAsync(id) is { } claim ? Ok(claim) : NotFound();
 
     [HttpPost]
-    public async Task<ActionResult<Claim>> CreateAsync(Claim claim) =>
-        Ok(await claimService.CreateAsync(claim));
+    public async Task<ActionResult<Claim>> CreateAsync(CreateClaimRequest request) =>
+        Ok(await claimService.CreateAsync(request.ToClaim()));
 
     [HttpDelete("{id}")]
-    public Task DeleteAsync(string id) => claimService.DeleteAsync(id);
+    public async Task<ActionResult> DeleteAsync(string id) =>
+        await claimService.DeleteAsync(id) ? Ok() : NotFound();
 }

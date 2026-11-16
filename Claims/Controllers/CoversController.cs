@@ -1,6 +1,8 @@
+using Claims.Contracts;
 using Claims.Domain;
 using Claims.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Claims.Controllers;
 
@@ -9,8 +11,11 @@ namespace Claims.Controllers;
 public class CoversController(CoverService coverService) : ControllerBase
 {
     [HttpPost("compute")]
-    public ActionResult<decimal> ComputePremium(DateTime startDate, DateTime endDate, CoverType coverType) =>
-        Ok(coverService.ComputePremium(startDate, endDate, coverType));
+    public ActionResult<decimal> ComputePremium(
+        [BindRequired] DateTime startDate,
+        [BindRequired] DateTime endDate,
+        [BindRequired] CoverType coverType) =>
+        Ok(coverService.ComputePremium(startDate.AsUtc(), endDate.AsUtc(), coverType));
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Cover>>> GetAsync() =>
@@ -18,12 +23,13 @@ public class CoversController(CoverService coverService) : ControllerBase
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Cover>> GetAsync(string id) =>
-        Ok(await coverService.GetByIdAsync(id));
+        await coverService.GetByIdAsync(id) is { } cover ? Ok(cover) : NotFound();
 
     [HttpPost]
-    public async Task<ActionResult<Cover>> CreateAsync(Cover cover) =>
-        Ok(await coverService.CreateAsync(cover));
+    public async Task<ActionResult<Cover>> CreateAsync(CreateCoverRequest request) =>
+        Ok(await coverService.CreateAsync(request.ToCover()));
 
     [HttpDelete("{id}")]
-    public Task DeleteAsync(string id) => coverService.DeleteAsync(id);
+    public async Task<ActionResult> DeleteAsync(string id) =>
+        await coverService.DeleteAsync(id) ? Ok() : NotFound();
 }
