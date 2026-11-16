@@ -13,7 +13,7 @@ namespace Claims.Tests.Integration;
 /// Starts the real API once for all integration tests. Program.cs starts MongoDB and SQL Server
 /// with Testcontainers, so Docker must be running.
 /// </summary>
-public sealed class ApiFixture : IAsyncLifetime
+public sealed class ApiFixture : IAsyncDisposable
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -23,19 +23,28 @@ public sealed class ApiFixture : IAsyncLifetime
     // The API clock is fixed, so tests do not break when the run crosses midnight.
     public static readonly DateTime Today = DateTime.UtcNow.Date;
 
-    public WebApplicationFactory<Program> Factory { get; } = new WebApplicationFactory<Program>()
+    private readonly WebApplicationFactory<Program> _factory = new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder => builder.ConfigureServices(services =>
             services.AddSingleton<TimeProvider>(new FixedTimeProvider(Today.AddHours(12)))));
 
-    // Start the server once here. The lazy start in WebApplicationFactory is not thread safe, so test classes
-    // running in parallel would otherwise start several hosts, each with its own containers.
-    public ValueTask InitializeAsync()
+    private readonly Lock _startLock = new();
+
+    // The server starts on first use, so unit-only runs need no Docker. The lazy start in WebApplicationFactory
+    // is not thread safe, and parallel test classes would otherwise start several hosts with their own containers.
+    public WebApplicationFactory<Program> Factory
     {
-        Factory.StartServer();
-        return ValueTask.CompletedTask;
+        get
+        {
+            lock (_startLock)
+            {
+                _factory.StartServer();
+            }
+
+            return _factory;
+        }
     }
 
     public HttpClient CreateClient() => Factory.CreateClient();
 
-    public ValueTask DisposeAsync() => Factory.DisposeAsync();
+    public ValueTask DisposeAsync() => _factory.DisposeAsync();
 }
