@@ -1,5 +1,6 @@
 using Claims.Auditing;
-using Claims.Controllers;
+using Claims.Persistence;
+using Claims.Services;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Driver;
 using System.Runtime.InteropServices;
@@ -21,7 +22,6 @@ var mongoContainer = new MongoDbBuilder("mongo:latest")
 await sqlContainer.StartAsync();
 await mongoContainer.StartAsync();
 
-// Add services to the container.
 builder.Services
     .AddControllers()
     .AddJsonOptions(x =>
@@ -35,17 +35,22 @@ builder.Services.AddDbContext<AuditContext>(options =>
 builder.Services.AddDbContext<ClaimsContext>(options =>
 {
     var client = new MongoClient(mongoContainer.GetConnectionString());
-    var database = client.GetDatabase(builder.Configuration["MongoDb:DatabaseName"]); // Use a default/test database name
-    options.UseMongoDB(database.Client, database.DatabaseNamespace.DatabaseName);
+    options.UseMongoDB(client, builder.Configuration["MongoDb:DatabaseName"]!);
 });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Application services
+builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
+builder.Services.AddScoped<ICoverRepository, CoverRepository>();
+builder.Services.AddScoped<IAuditer, Auditer>();
+builder.Services.AddScoped<ClaimService>();
+builder.Services.AddScoped<CoverService>();
+builder.Services.AddSingleton<PremiumCalculator>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
