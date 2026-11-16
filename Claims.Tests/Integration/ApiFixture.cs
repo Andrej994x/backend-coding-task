@@ -13,7 +13,7 @@ namespace Claims.Tests.Integration;
 /// Starts the real API once for all integration tests. Program.cs starts MongoDB and SQL Server
 /// with Testcontainers, so Docker must be running.
 /// </summary>
-public sealed class ApiFixture : IAsyncDisposable
+public sealed class ApiFixture : IAsyncLifetime
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -26,6 +26,14 @@ public sealed class ApiFixture : IAsyncDisposable
     public WebApplicationFactory<Program> Factory { get; } = new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder => builder.ConfigureServices(services =>
             services.AddSingleton<TimeProvider>(new FixedTimeProvider(Today.AddHours(12)))));
+
+    // Start the server once here. The lazy start in WebApplicationFactory is not thread safe, so test classes
+    // running in parallel would otherwise start several hosts, each with its own containers.
+    public ValueTask InitializeAsync()
+    {
+        Factory.StartServer();
+        return ValueTask.CompletedTask;
+    }
 
     public HttpClient CreateClient() => Factory.CreateClient();
 

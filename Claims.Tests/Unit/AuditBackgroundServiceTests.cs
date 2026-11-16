@@ -63,9 +63,13 @@ public class AuditBackgroundServiceTests
 
         using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await service.StopAsync(shutdownTimeout.Token);
+        // The host disposes the service right after stopping it; disposing twice must also be safe.
+        service.Dispose();
+        service.Dispose();
 
         // The worker must really end, not keep running after the host has stopped.
         await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.True(service.ExecuteTask.IsCompletedSuccessfully);
     }
 
     // A database that never answers.

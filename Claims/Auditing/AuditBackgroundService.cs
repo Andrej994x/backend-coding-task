@@ -67,8 +67,8 @@ public class AuditBackgroundService(
     public override void Dispose()
     {
         // Stop the worker also when the host is disposed without a normal stop.
+        // The token source is not disposed on purpose: the worker may still read its token, and it has no timer to release.
         _abort.Cancel();
-        _abort.Dispose();
         base.Dispose();
     }
 
