@@ -32,6 +32,15 @@ Testcontainers (trait `Category=Integration`). To run only the unit tests:
 dotnet test -- --filter-not-trait "Category=Integration"
 ```
 
+What is tested where:
+
+- `Unit/*ValidatorTests`: every business rule and its boundary values.
+- `Unit/*ServiceTests`: what happens around the rules: valid data is saved and audited, invalid data is neither
+  saved nor audited, get/delete of existing and unknown ids. They use small hand-written fakes (`Fakes.cs`).
+- `Unit/PremiumCalculatorTests`: all cover types at 1, 30, 31, 180, 181, 365 and 366 days, with hand-computed values.
+- `Unit/Audit*Tests`: the queue (backpressure, closing) and the background service (saving, failure, shutdown).
+- `Integration/*`: HTTP status codes, JSON, real MongoDB and SQL Server, and audit rows that appear asynchronously.
+
 ## Architecture
 
 One API project with simple logical layers:
