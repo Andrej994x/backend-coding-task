@@ -34,10 +34,10 @@ public class AuditingApiTests(ApiFixture fixture) : ApiTestBase(fixture)
         Assert.Empty(await WaitForCoverAuditsAsync(unknownId, expectedCount: 0));
     }
 
-    // Audits are saved in the background, so poll SQL Server for a short time.
+    // Audits are saved in the background, so poll SQL Server. The first write to a new container can be slow.
     private async Task<List<string>> WaitForCoverAuditsAsync(string coverId, int expectedCount)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (true)
         {
             using var scope = _fixture.Factory.Services.CreateScope();

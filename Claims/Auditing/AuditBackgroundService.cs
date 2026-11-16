@@ -14,11 +14,13 @@ public class AuditBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        AuditEntry? current = null;
         try
         {
             // The loop ends when the queue is completed and empty, so events queued before shutdown are still saved.
             await foreach (var entry in queue.Reader.ReadAllAsync(_abort.Token))
             {
+                current = entry;
                 try
                 {
                     await SaveAsync(entry, _abort.Token);
@@ -28,11 +30,15 @@ public class AuditBackgroundService(
                     // One failed event must not stop the processing of the next events.
                     logger.LogError(ex, "Failed to save audit entry {@AuditEntry}", entry);
                 }
+
+                current = null;
             }
         }
         catch (OperationCanceledException) when (_abort.IsCancellationRequested)
         {
-            logger.LogWarning("Shutdown timeout reached. At least {Count} audit entries were not saved.", queue.Reader.Count);
+            logger.LogWarning(
+                "Shutdown timeout reached. Interrupted audit entry: {@AuditEntry}. {Count} queued audit entries were not saved.",
+                current, queue.Reader.Count);
         }
     }
 
@@ -40,12 +46,28 @@ public class AuditBackgroundService(
     {
         // The web server is already stopped here, so no new events arrive. Close the queue and let it drain.
         queue.Complete();
-        await using var registration = cancellationToken.Register(_abort.Cancel);
+
+        // Wait for the drain before base.StopAsync, because base.StopAsync cancels the worker immediately.
+        if (ExecuteTask is not null)
+        {
+            try
+            {
+                await ExecuteTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // The host shutdown timeout expired: stop saving the remaining entries.
+                await _abort.CancelAsync();
+            }
+        }
+
         await base.StopAsync(cancellationToken);
     }
 
     public override void Dispose()
     {
+        // Stop the worker also when the host is disposed without a normal stop.
+        _abort.Cancel();
         _abort.Dispose();
         base.Dispose();
     }

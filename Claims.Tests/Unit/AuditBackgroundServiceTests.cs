@@ -53,6 +53,32 @@ public class AuditBackgroundServiceTests
         Assert.Equal(2, attempts);
     }
 
+    [Fact]
+    public async Task Stop_gives_up_when_the_shutdown_timeout_expires()
+    {
+        await using var provider = BuildProvider(services => services.AddScoped<AuditContext>(_ => new HangingAuditContext()));
+        var service = CreateService(provider);
+        await service.StartAsync(Ct);
+        await _queue.AuditClaimAsync("claim-1", "POST");
+
+        using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await service.StopAsync(shutdownTimeout.Token);
+
+        // The worker must really end, not keep running after the host has stopped.
+        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+    }
+
+    // A database that never answers.
+    private sealed class HangingAuditContext()
+        : AuditContext(new DbContextOptionsBuilder<AuditContext>().UseInMemoryDatabase("hanging").Options)
+    {
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+    }
+
     private AuditBackgroundService CreateService(ServiceProvider provider) =>
         new(_queue, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<AuditBackgroundService>.Instance);
 
