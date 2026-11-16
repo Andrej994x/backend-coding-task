@@ -1,5 +1,7 @@
 using Claims.Auditing;
-using Claims.Controllers;
+using Claims.Persistence;
+using Claims.Services;
+using Claims.Validation;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Driver;
 using System.Runtime.InteropServices;
@@ -21,7 +23,6 @@ var mongoContainer = new MongoDbBuilder("mongo:latest")
 await sqlContainer.StartAsync();
 await mongoContainer.StartAsync();
 
-// Add services to the container.
 builder.Services
     .AddControllers()
     .AddJsonOptions(x =>
@@ -32,20 +33,36 @@ builder.Services
 builder.Services.AddDbContext<AuditContext>(options =>
     options.UseSqlServer(sqlContainer.GetConnectionString()));
 
+// Create one MongoClient for the whole app. A new client per DbContext makes EF build a new internal service provider every time.
+var mongoClient = new MongoClient(mongoContainer.GetConnectionString());
 builder.Services.AddDbContext<ClaimsContext>(options =>
-{
-    var client = new MongoClient(mongoContainer.GetConnectionString());
-    var database = client.GetDatabase(builder.Configuration["MongoDb:DatabaseName"]); // Use a default/test database name
-    options.UseMongoDB(database.Client, database.DatabaseNamespace.DatabaseName);
-});
+    options.UseMongoDB(mongoClient, builder.Configuration["MongoDb:DatabaseName"]!));
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Application services
+builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
+builder.Services.AddScoped<ICoverRepository, CoverRepository>();
+builder.Services.AddScoped<ClaimService>();
+builder.Services.AddScoped<CoverService>();
+builder.Services.AddSingleton<PremiumCalculator>();
+builder.Services.AddSingleton<CoverValidator>();
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Auditing: a request only puts an event in the queue, a background service saves it to SQL Server.
+builder.Services.AddSingleton<AuditQueue>();
+builder.Services.AddSingleton<IAuditer>(sp => sp.GetRequiredService<AuditQueue>());
+builder.Services.AddHostedService<AuditBackgroundService>();
+
+// Business rule violations are returned as 400 Bad Request.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

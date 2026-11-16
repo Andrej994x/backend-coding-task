@@ -1,98 +1,35 @@
-using Claims.Auditing;
+using Claims.Contracts;
+using Claims.Domain;
+using Claims.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Claims.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class CoversController : ControllerBase
+public class CoversController(CoverService coverService) : ControllerBase
 {
-    private readonly ClaimsContext _claimsContext;
-    private readonly ILogger<CoversController> _logger;
-    private readonly Auditer _auditer;
-
-    public CoversController(ClaimsContext claimsContext, AuditContext auditContext, ILogger<CoversController> logger)
-    {
-        _claimsContext = claimsContext;
-        _logger = logger;
-        _auditer = new Auditer(auditContext);
-    }
-
     [HttpPost("compute")]
-    public async Task<ActionResult> ComputePremiumAsync(DateTime startDate, DateTime endDate, CoverType coverType)
-    {
-        return Ok(ComputePremium(startDate, endDate, coverType));
-    }
+    public ActionResult<decimal> ComputePremium(
+        [BindRequired] DateTime startDate,
+        [BindRequired] DateTime endDate,
+        [BindRequired] CoverType coverType) =>
+        Ok(coverService.ComputePremium(startDate.AsUtc(), endDate.AsUtc(), coverType));
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Cover>>> GetAsync()
-    {
-        var results = await _claimsContext.Covers.ToListAsync();
-        return Ok(results);
-    }
+    public async Task<ActionResult<IEnumerable<Cover>>> GetAsync() =>
+        Ok(await coverService.GetAllAsync());
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Cover>> GetAsync(string id)
-    {
-        var results = await _claimsContext.Covers.ToListAsync();
-        return Ok(results.SingleOrDefault(cover => cover.Id == id));
-    }
+    public async Task<ActionResult<Cover>> GetAsync(string id) =>
+        await coverService.GetByIdAsync(id) is { } cover ? Ok(cover) : NotFound();
 
     [HttpPost]
-    public async Task<ActionResult> CreateAsync(Cover cover)
-    {
-        cover.Id = Guid.NewGuid().ToString();
-        cover.Premium = ComputePremium(cover.StartDate, cover.EndDate, cover.Type);
-        _claimsContext.Covers.Add(cover);
-        await _claimsContext.SaveChangesAsync();
-        _auditer.AuditCover(cover.Id, "POST");
-        return Ok(cover);
-    }
+    public async Task<ActionResult<Cover>> CreateAsync(CreateCoverRequest request) =>
+        Ok(await coverService.CreateAsync(request.ToCover()));
 
     [HttpDelete("{id}")]
-    public async Task DeleteAsync(string id)
-    {
-        _auditer.AuditCover(id, "DELETE");
-        var cover = await _claimsContext.Covers.Where(cover => cover.Id == id).SingleOrDefaultAsync();
-        if (cover is not null)
-        {
-            _claimsContext.Covers.Remove(cover);
-            await _claimsContext.SaveChangesAsync();
-        }
-    }
-
-    private decimal ComputePremium(DateTime startDate, DateTime endDate, CoverType coverType)
-    {
-        var multiplier = 1.3m;
-        if (coverType == CoverType.Yacht)
-        {
-            multiplier = 1.1m;
-        }
-
-        if (coverType == CoverType.PassengerShip)
-        {
-            multiplier = 1.2m;
-        }
-
-        if (coverType == CoverType.Tanker)
-        {
-            multiplier = 1.5m;
-        }
-
-        var premiumPerDay = 1250 * multiplier;
-        var insuranceLength = (endDate - startDate).TotalDays;
-        var totalPremium = 0m;
-
-        for (var i = 0; i < insuranceLength; i++)
-        {
-            if (i < 30) totalPremium += premiumPerDay;
-            if (i < 180 && coverType == CoverType.Yacht) totalPremium += premiumPerDay - premiumPerDay * 0.05m;
-            else if (i < 180) totalPremium += premiumPerDay - premiumPerDay * 0.02m;
-            if (i < 365 && coverType != CoverType.Yacht) totalPremium += premiumPerDay - premiumPerDay * 0.03m;
-            else if (i < 365) totalPremium += premiumPerDay - premiumPerDay * 0.08m;
-        }
-
-        return totalPremium;
-    }
+    public async Task<ActionResult> DeleteAsync(string id) =>
+        await coverService.DeleteAsync(id) ? Ok() : NotFound();
 }
