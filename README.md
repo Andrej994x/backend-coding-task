@@ -80,3 +80,32 @@ Date assumptions:
 
 Not added on purpose, because the assignment does not ask for it: a minimum `DamageCost`, and blocking the
 deletion of a cover that still has claims.
+
+## Asynchronous auditing
+
+Before, every `POST`/`DELETE` waited for a synchronous `INSERT` into SQL Server. Now:
+
+1. After a successful save, the service calls `IAuditer`. The implementation `AuditQueue` only writes an
+   `AuditEntry` to a bounded in-memory `Channel` (capacity 1000) and returns.
+2. `AuditBackgroundService` (a hosted `BackgroundService`) reads the channel and saves each entry with a new DI scope,
+   so every save gets its own `AuditContext` (a `DbContext` is not thread safe).
+3. A failed save is logged with the entry data and the next entry is processed. There is no retry.
+
+Behaviour notes:
+
+- Only successful operations are audited. A `DELETE` of an unknown id (404) or a rejected request (400) creates no audit row.
+  (Before, `DELETE` was audited before deleting, also for unknown ids.)
+- The audit `Created` time is UTC and is taken when the event is queued (before, it was server local time).
+- Backpressure: if the queue is full, the request waits for free space instead of losing the event.
+  This only happens if SQL Server is slower than the incoming traffic for a long time.
+- Graceful shutdown: the web server stops first, then the queue is closed and the remaining entries are saved.
+  If this takes longer than the host shutdown timeout, the remaining entries are dropped and a warning is logged.
+
+Limitations of this in-memory approach (accepted for this task):
+
+- Events in the queue are lost if the process crashes or is killed.
+- Each API instance has its own queue; there is no shared, durable queue.
+- The audit row can be written shortly after the HTTP response, so it is eventually consistent.
+
+For guaranteed delivery, the next step would be an outbox table written in the same transaction as the business data,
+or a durable broker (for example Azure Service Bus).

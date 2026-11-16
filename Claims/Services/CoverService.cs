@@ -32,14 +32,20 @@ public class CoverService(
         cover.Id = Guid.NewGuid().ToString();
         cover.Premium = premiumCalculator.Calculate(cover.StartDate, cover.EndDate, cover.Type);
         await coverRepository.AddAsync(cover);
-        auditer.AuditCover(cover.Id, "POST");
+        await auditer.AuditCoverAsync(cover.Id, "POST");
         return cover;
     }
 
     /// <summary>Returns false when the cover does not exist.</summary>
     public async Task<bool> DeleteAsync(string id)
     {
-        auditer.AuditCover(id, "DELETE");
-        return await coverRepository.DeleteAsync(id);
+        var deleted = await coverRepository.DeleteAsync(id);
+        // Only audit operations that really changed data.
+        if (deleted)
+        {
+            await auditer.AuditCoverAsync(id, "DELETE");
+        }
+
+        return deleted;
     }
 }
