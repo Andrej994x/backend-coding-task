@@ -1,11 +1,11 @@
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace Claims;
+namespace Claims.Domain;
 
 public class Cover
 {
     [BsonId]
-    public string Id { get; set; }
+    public string Id { get; set; } = null!;
 
     [BsonElement("startDate")]
     public DateTime StartDate { get; set; }
@@ -13,6 +13,7 @@ public class Cover
     [BsonElement("endDate")]
     public DateTime EndDate { get; set; }
 
+    // The element name is "claimType" for historical reasons. It is kept so existing documents still load.
     [BsonElement("claimType")]
     public CoverType Type { get; set; }
 
