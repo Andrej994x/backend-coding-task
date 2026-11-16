@@ -41,12 +41,16 @@ builder.Services.AddDbContext<ClaimsContext>(options =>
 // Application services
 builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
 builder.Services.AddScoped<ICoverRepository, CoverRepository>();
-builder.Services.AddScoped<IAuditer, Auditer>();
 builder.Services.AddScoped<ClaimService>();
 builder.Services.AddScoped<CoverService>();
 builder.Services.AddSingleton<PremiumCalculator>();
 builder.Services.AddSingleton<CoverValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Auditing: a request only puts an event in the queue, a background service saves it to SQL Server.
+builder.Services.AddSingleton<AuditQueue>();
+builder.Services.AddSingleton<IAuditer>(sp => sp.GetRequiredService<AuditQueue>());
+builder.Services.AddHostedService<AuditBackgroundService>();
 
 // Business rule violations are returned as 400 Bad Request.
 builder.Services.AddProblemDetails();

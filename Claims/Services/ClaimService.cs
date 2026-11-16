@@ -20,14 +20,20 @@ public class ClaimService(IClaimRepository claimRepository, ICoverRepository cov
 
         claim.Id = Guid.NewGuid().ToString();
         await claimRepository.AddAsync(claim);
-        auditer.AuditClaim(claim.Id, "POST");
+        await auditer.AuditClaimAsync(claim.Id, "POST");
         return claim;
     }
 
     /// <summary>Returns false when the claim does not exist.</summary>
     public async Task<bool> DeleteAsync(string id)
     {
-        auditer.AuditClaim(id, "DELETE");
-        return await claimRepository.DeleteAsync(id);
+        var deleted = await claimRepository.DeleteAsync(id);
+        // Only audit operations that really changed data.
+        if (deleted)
+        {
+            await auditer.AuditClaimAsync(id, "DELETE");
+        }
+
+        return deleted;
     }
 }
